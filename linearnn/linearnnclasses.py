@@ -18,13 +18,35 @@ class LinearLayer(object):
 
 
     def forward(self, x, backprop=False):
-        
+
+        if backprop: self.input = x # remeber input to the layer for backprop
+
         linear_transformation_output = np.dot(x, self.weights) + self.bias # Wx + b
         if backprop:self.linear_transrom = linear_transformation_output # saving these to be used in backpropigation
 
         activation = self.activation_fn(linear_transformation_output) # activation function
         if backprop:self.activation = activation
         return(activation)
+    
+
+    def backward(self, output_gradient):
+        # forward is run inside the sequential model class below (with backprop=True)
+
+        # d/dx activation function w.r.t. linear transformation Wx + b
+        activation_gradient = self.activation_fn.derivative(self.linear_transrom) # note activation function should be a class that has a function derivative
+        layer_output_gradient = output_gradient * activation_gradient
+
+        # weights and bias
+        weights_gradient = np.dot(self.input.T, layer_output_gradient)
+        bias_gradient = np.sum(layer_output_gradient, axis=0) 
+
+        # make update to weights and biases
+        learning_rate = 0.01
+        self.weights -= learning_rate * weights_gradient
+        self.bias -= learning_rate * bias_gradient
+
+        return np.dot(layer_output_gradient, self.weights.T) # return the gradient (to be passed to previous layer)
+
 
 
 class SequentialModel(object):
@@ -79,25 +101,12 @@ class SequentialModel(object):
         loss_gradient = None # not sure how to calculate this yet
         
 
-        # layer_gradients = []
-        # # start from the last layer of the model
-        for i in reversed(range(len(self.model))):
-            layer = self.model[i]
+        # start from the last layer of the model
+        for layer in reversed(self.model):
             print(layer)
+            loss_gradient = layer.backward(loss_gradient) # relys on the layer backward function
 
-            # d/dx w.r.t. activation
-            if i == len(self.model) - 1:
-                # this is the last layer so do element wise multiplication (not dot product)
-                activation_gradient = self.activation_fns[i].derivative(y_hat) 
-                layer_output_gradient = loss_gradient * activation_gradient
-            else:
-                # for hidden layers
-                activation_gradient = self.activation_fns[i].derivative('output from prev layer') # output from previous layer
-                layer_output_gradient = np.dot(self.model[i-1].weights.T, layer_output_gradient) * activation_gradient
-            
-
-
-            # d/dx w.r.t. weights and bias
+        return loss
 
             
 
