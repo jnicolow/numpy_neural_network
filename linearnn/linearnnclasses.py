@@ -2,29 +2,34 @@ import numpy as np
 
 
 class LinearLayer(object):
-    def __init__(self, input_size, output_size, activation_fn, weight_init=None):
+    def __init__(self, input_size, output_size, activation_fn_class, weight_init=None):
         if not weight_init is None:
             self.weights = weight_init((input_size, output_size))
         else:
             self.weights = np.random.randn(input_size, output_size)
         self.input_size = input_size
         self.output_size = output_size
-        self.activation_fn = activation_fn
+        self.activation_fn_class = activation_fn_class
+        print(activation_fn_class().forward([-10, 6]))
+        print(self.activation_fn_class().forward([-1, 5]))
 
         self.bias = np.zeros(output_size) # initialized to zero (changed during training)
 
     def __repr__(self):
-        return f"LinearLayer input:{self.input_size}, output:{self.output_size}, activation:{str(self.activation_fn)}"
+        return f"LinearLayer input:{self.input_size}, output:{self.output_size}, activation:{str(self.activation_fn_class)}"
 
 
     def forward(self, x, backprop=False):
 
         if backprop: self.input = x # remeber input to the layer for backprop
 
+        # linear transformation
         linear_transformation_output = np.dot(x, self.weights) + self.bias # Wx + b
         if backprop:self.linear_transrom = linear_transformation_output # saving these to be used in backpropigation
 
-        activation = self.activation_fn(linear_transformation_output) # activation function
+        # activation
+        print(self.activation_fn_class.forward())
+        activation = self.activation_fn_class().forward(linear_transformation_output) # activation function
         if backprop:self.activation = activation
         return(activation)
     
@@ -33,7 +38,7 @@ class LinearLayer(object):
         # forward is run inside the sequential model class below (with backprop=True)
 
         # d/dx activation function w.r.t. linear transformation Wx + b
-        activation_gradient = self.activation_fn.derivative(self.linear_transrom) # note activation function should be a class that has a function derivative
+        activation_gradient = self.activation_fn_class.derivative(self.linear_transrom) # note activation function should be a class that has a function derivative
         layer_output_gradient = output_gradient * activation_gradient
 
         # weights and bias
@@ -50,15 +55,15 @@ class LinearLayer(object):
 
 
 class SequentialModel(object):
-    def __init__(self, input_size:int, output_size:int, hidden_layers:tuple, activation_fns:tuple, weight_init:tuple=None, loss_fn=None):
+    def __init__(self, input_size:int, output_size:int, hidden_layers:tuple, activation_fn_classes:tuple, weight_init:tuple=None, loss_fn_class=None):
         self.input_size = input_size
         # self.output_size = output_size
         self.layers = (input_size, *hidden_layers, output_size) # all the layers but the iput layer
         print(self.layers)
-        self.activation_fns = activation_fns
-        if weight_init is None: self.weight_init = (None,) * len(activation_fns)  # create tuple of None to just use random
+        self.activation_fn_classes = activation_fn_classes
+        if weight_init is None: self.weight_init = (None,) * len(activation_fn_classes)  # create tuple of None to just use random
         else: self.weight_init = weight_init  # use the provided weight_init if it exists
-        self.loss_fn = loss_fn
+        self.loss_fn_class = loss_fn_class
 
         self.model = self.build_model()
 
@@ -71,7 +76,7 @@ class SequentialModel(object):
             layer = LinearLayer(
                 self.layers[i-1], 
                 self.layers[i], 
-                activation_fn=self.activation_fns[i], 
+                activation_fn_class=self.activation_fn_classes[i], 
                 weight_init=self.weight_init[i]
             )
             
@@ -96,9 +101,8 @@ class SequentialModel(object):
         # performs a backward pass through the model
         y_hat = self.forward(x, backprop=True) # backprop true to save self.linear_transform and self.activation in each layer
 
-        loss = self.loss_fn(y=y, y_hat=y_hat)
-        print(loss)
-        loss_gradient = None # not sure how to calculate this yet
+        loss = self.loss_fn_class.forward(y=y, y_hat=y_hat)
+        loss_gradient = self.loss_fn_class.derivative(x) # not sure how to calculate this yet
         
 
         # start from the last layer of the model
