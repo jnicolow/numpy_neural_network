@@ -2,8 +2,11 @@ import numpy as np
 
 
 class LinearLayer(object):
-    def __init__(self, input_size, output_size, activation, bias=None):
-        self.weights = np.random.randn(input_size, output_size)
+    def __init__(self, input_size, output_size, activation, weight_init=None, bias=None):
+        if not weight_init is None:
+            self.weights = weight_init((input_size, output_size))
+        else:
+            self.weights = np.random.randn(input_size, output_size)
         self.input_size = input_size
         self.output_size = output_size
         self.activation = activation
@@ -21,22 +24,34 @@ class LinearLayer(object):
 
 
 class SequentialModel(object):
-    def __init__(self, input_size, output_size, hidden_layers:tuple, activation):
+    def __init__(self, input_size:int, output_size:int, hidden_layers:tuple, activations:tuple, weight_init:tuple=None):
         self.input_size = input_size
-        self.output_size = output_size
-        self.hidden_layers = hidden_layers
-        self.activation = activation
+        # self.output_size = output_size
+        self.layers = (input_size, *hidden_layers, output_size) # all the layers but the iput layer
+        print(self.layers)
+        self.activations = activations
+        if weight_init is None: self.weight_init = (None,) * len(activations)  # create tuple of None to just use random
+        else: self.weight_init = weight_init  # use the provided weight_init if it exists
+
 
 
     def forward(self, x):
-        input_layer = LinearLayer(self.input_size, self.hidden_layers[0], activation=self.activation)
-        x = input_layer.forward(x)
-        print(input_layer)
-        for i in range(len(self.hidden_layers)-1):
-            hidden_layer = LinearLayer(self.hidden_layers[i], self.hidden_layers[i+1], activation=self.activation)
-            x = hidden_layer.forward(x)
-            print(hidden_layer)
 
-        output_layer = LinearLayer(self.hidden_layers[i+1], self.output_size, activation=self.activation)
-        x = output_layer.forward(x)
-        print(output_layer)
+        for i in range(1, len(self.layers)):
+
+            layer = LinearLayer(
+                self.layers[i-1], 
+                self.layers[i], 
+                activation=self.activations[i], 
+                weight_init=self.weight_init[i]
+            )
+            x = layer.forward(x)
+            print(layer)
+
+        return x
+    
+    def backward(self, x, y):
+        # performs a backward pass through the model
+        
+
+
