@@ -1,9 +1,9 @@
 import numpy as np
 from linearnn.activationfunctions import Softmax # check if it is softmax because we dont differentiate this activation
-
+# from linearnn.optim import AdamOptimizer # import optimizer incase one isnt provided
 
 class LinearLayer(object):
-    def __init__(self, input_size, output_size, activation_fn_class, weight_init=None):
+    def __init__(self, input_size, output_size, activation_fn_class, weight_init=None, optimizer=None):
         if not weight_init is None:
             self.weights = weight_init((input_size, output_size))
         else:
@@ -13,6 +13,8 @@ class LinearLayer(object):
         self.activation_fn_class = activation_fn_class
 
         self.bias = np.zeros(output_size) # initialized to zero (changed during training)
+
+        self.optimizer = optimizer
 
     def __repr__(self):
         return f"LinearLayer input:{self.input_size}, output:{self.output_size}, activation:{str(self.activation_fn_class)}"
@@ -34,7 +36,7 @@ class LinearLayer(object):
 
     def backward(self, output_gradient, y=None):
         # forward is run inside the sequential model class below (with backprop=True) y only used for differentiating soft max
-        print(self.linear_transrom.shape)
+        # print(self.linear_transrom.shape)
 
         if isinstance(self.activation_fn_class(), Softmax):
             # gradient for softmax + cross-ent combined
@@ -47,22 +49,28 @@ class LinearLayer(object):
             layer_output_gradient = output_gradient * activation_gradient # dL/dz = dL/da * da/dz
 
         # weights and bias
-        print(self.input.shape)
-        print(layer_output_gradient.shape)
+        # print(self.input.shape)
+        # print(layer_output_gradient.shape)
         weights_gradient = np.dot(self.input.T, layer_output_gradient) # dL/dW = X^T * dL/dz
         bias_gradient = np.sum(layer_output_gradient, axis=0)  # dL/db = sum(dL/z)
 
         # make update to weights and biases
         learning_rate = 0.01
-        self.weights -= learning_rate * weights_gradient / self.input.shape[0] # devide by batch size to get average for batch size
-        self.bias -= learning_rate * bias_gradient / self.input.shape[0] 
-        print(np.dot(layer_output_gradient, self.weights.T).shape)
-        return np.dot(layer_output_gradient, self.weights.T) # return the gradient (to be passed to previous layer)
+        if self.optimizer is None:
+            # just do vanila GD update
+            self.weights -= learning_rate * weights_gradient / self.input.shape[0] # devide by batch size to get average for batch size
+            self.bias -= learning_rate * bias_gradient / self.input.shape[0] 
+        else:
+            self.weights = self.optimizer.update(self.weights, weights_gradient)
+            self.bias = self.optimizer.update(self.bias, bias_gradient)
+        
+        # print(np.dot(layer_output_gradient, self.weights.T).shape)
+        return np.dot(layer_output_gradient, self.weights.T) # return the gradient (to be passed to previous layer) (batch size by # nodes in layer)
 
 
 
 class SequentialModel(object):
-    def __init__(self, input_size:int, output_size:int, hidden_layers:tuple, activation_fn_classes:tuple, weight_init:tuple=None, loss_fn_class=None):
+    def __init__(self, input_size:int, output_size:int, hidden_layers:tuple, activation_fn_classes:tuple, weight_init:tuple=None, loss_fn_class=None, optimizer=None):
         self.input_size = input_size
         # self.output_size = output_size
         self.layers = (input_size, *hidden_layers, output_size) # all the layers but the iput layer
@@ -71,8 +79,9 @@ class SequentialModel(object):
         if weight_init is None: self.weight_init = (None,) * len(activation_fn_classes)  # create tuple of None to just use random
         else: self.weight_init = weight_init  # use the provided weight_init if it exists
         self.loss_fn_class = loss_fn_class
+        self.optimizer = optimizer
 
-        self.model = self.build_model()
+        self.model = self.build_model() # build the model
 
 
     def build_model(self):
@@ -84,7 +93,8 @@ class SequentialModel(object):
                 self.layers[i-1], 
                 self.layers[i], 
                 activation_fn_class=self.activation_fn_classes[i], 
-                weight_init=self.weight_init[i]
+                weight_init=self.weight_init[i],
+                optimizer = self.optimizer
             )
             
             print(f'Adding: {layer}')
