@@ -53,9 +53,19 @@ class LinearLayer(object):
         # print(layer_output_gradient.shape)
         weights_gradient = np.dot(self.input.T, layer_output_gradient) # dL/dW = X^T * dL/dz
         bias_gradient = np.sum(layer_output_gradient, axis=0)  # dL/db = sum(dL/z)
+        
+        # make sure gradients dont expload (with out this gradient explosion occured)
+        max_norm = 1.0  # normalize to 1
+        total_norm = np.linalg.norm(weights_gradient)
+        if total_norm > max_norm:
+            scale = max_norm / total_norm
+            weights_gradient *= scale
+            bias_gradient *= scale
 
+        print("Max gradient:", np.max(weights_gradient))
+        print("Min gradient:", np.min(weights_gradient))
         # make update to weights and biases
-        learning_rate = 0.01
+        learning_rate = 0.0001
         if self.optimizer is None:
             # just do vanila GD update
             self.weights -= learning_rate * weights_gradient / self.input.shape[0] # devide by batch size to get average for batch size
@@ -74,7 +84,6 @@ class SequentialModel(object):
         self.input_size = input_size
         # self.output_size = output_size
         self.layers = (input_size, *hidden_layers, output_size) # all the layers but the iput layer
-        print(self.layers)
         self.activation_fn_classes = activation_fn_classes
         if weight_init is None: self.weight_init = (None,) * len(activation_fn_classes)  # create tuple of None to just use random
         else: self.weight_init = weight_init  # use the provided weight_init if it exists
@@ -124,7 +133,7 @@ class SequentialModel(object):
 
         # start from the last layer of the model
         for layer in reversed(self.model):
-            print(layer)
+            # print(layer)
             if isinstance(layer.activation_fn_class(), Softmax):
                 loss_gradient = layer.backward(loss_gradient, y=y) # have to pass y for derivative of softmax
             else:
