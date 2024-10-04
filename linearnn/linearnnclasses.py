@@ -2,6 +2,18 @@ import numpy as np
 from linearnn.activationfunctions import Softmax # check if it is softmax because we dont differentiate this activation
 # from linearnn.optim import AdamOptimizer # import optimizer incase one isnt provided
 
+
+
+def batch_norm(activations, epsilon=1e-5):
+    # calculate mean of batch
+    mean = np.mean(activations)
+    variance = np.mean((activations - mean) ** 2)
+
+    activations = ((activations - mean)**2) / np.sqrt(variance + epsilon)
+    return activations
+
+
+
 class LinearLayer(object):
     def __init__(self, input_size, output_size, activation_fn_class, weight_init=None, optimizer=None):
         if not weight_init is None:
@@ -13,14 +25,17 @@ class LinearLayer(object):
         self.activation_fn_class = activation_fn_class
 
         self.bias = np.zeros(output_size) # initialized to zero (changed during training)
-
-        self.optimizer = optimizer
+        if optimizer is None: self.optimizer_weights = None # used in back prop
+        else:
+            self.optimizer_weights = optimizer() # this is initializing a new optimizer (one specifically for this layer)
+            self.optimizer_bias = optimizer() # need a seperate one for weights and bias because they have different sizes
 
     def __repr__(self):
         return f"LinearLayer input:{self.input_size}, output:{self.output_size}, activation:{str(self.activation_fn_class)}"
 
 
     def forward(self, x, backprop=False):
+        # if backprop=False info used in back propigation wont be updated allowing for inference during training
 
         if backprop: self.input = x # remeber input to the layer for backprop
 
@@ -30,7 +45,11 @@ class LinearLayer(object):
 
         # activation
         activation = self.activation_fn_class().forward(linear_transformation_output) # activation function
+        # batch norm of activation
+        # activation = batch_norm(activations=activation)
+
         if backprop:self.activation = activation
+
         return(activation)
     
 
@@ -55,24 +74,24 @@ class LinearLayer(object):
         bias_gradient = np.sum(layer_output_gradient, axis=0)  # dL/db = sum(dL/z)
         
         # make sure gradients dont expload (with out this gradient explosion occured)
-        max_norm = 1.0  # normalize to 1
+        max_norm = 60.0  # normalize to threshold
         total_norm = np.linalg.norm(weights_gradient)
         if total_norm > max_norm:
             scale = max_norm / total_norm
             weights_gradient *= scale
             bias_gradient *= scale
 
-        print("Max gradient:", np.max(weights_gradient))
-        print("Min gradient:", np.min(weights_gradient))
+        # print("Max gradient:", np.max(weights_gradient))
+        # print("Min gradient:", np.min(weights_gradient))
         # make update to weights and biases
-        learning_rate = 0.0001
-        if self.optimizer is None:
+        learning_rate = 0.001
+        if self.optimizer_weights is None:
             # just do vanila GD update
             self.weights -= learning_rate * weights_gradient / self.input.shape[0] # devide by batch size to get average for batch size
             self.bias -= learning_rate * bias_gradient / self.input.shape[0] 
         else:
-            self.weights = self.optimizer.update(self.weights, weights_gradient)
-            self.bias = self.optimizer.update(self.bias, bias_gradient)
+            self.weights = self.optimizer_weights.update(self.weights, weights_gradient)
+            self.bias = self.optimizer_bias.update(self.bias, bias_gradient)
         
         # print(np.dot(layer_output_gradient, self.weights.T).shape)
         return np.dot(layer_output_gradient, self.weights.T) # return the gradient (to be passed to previous layer) (batch size by # nodes in layer)
