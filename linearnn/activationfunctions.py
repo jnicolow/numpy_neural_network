@@ -44,7 +44,6 @@ class Softmax(ActivationFunction):
         denominator = np.sum(np.exp(x)) # sum of all the e^logit for every logit
         return np.exp(x) / denominator # normalize e^logit value by sum of e^logits
     
-    def derivative(self, x):
-        # this is last layer and shouldnt be needed directly?
-        s = self.forward(x)
-        return np.diagflat(s) - np.dot(s, s.T)
+    def derivative(self, output_gradient, y):
+        # Done differentiate softmax, combine gradient with cross-ent loss
+        return output_gradient - y

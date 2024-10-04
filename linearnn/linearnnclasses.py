@@ -1,4 +1,5 @@
 import numpy as np
+from linearnn.activationfunctions import Softmax # check if it is softmax because we dont differentiate this activation
 
 
 class LinearLayer(object):
@@ -10,8 +11,6 @@ class LinearLayer(object):
         self.input_size = input_size
         self.output_size = output_size
         self.activation_fn_class = activation_fn_class
-        print(activation_fn_class().forward([-10, 6]))
-        print(self.activation_fn_class().forward([-1, 5]))
 
         self.bias = np.zeros(output_size) # initialized to zero (changed during training)
 
@@ -28,28 +27,36 @@ class LinearLayer(object):
         if backprop:self.linear_transrom = linear_transformation_output # saving these to be used in backpropigation
 
         # activation
-        print(self.activation_fn_class.forward())
         activation = self.activation_fn_class().forward(linear_transformation_output) # activation function
         if backprop:self.activation = activation
         return(activation)
     
 
-    def backward(self, output_gradient):
-        # forward is run inside the sequential model class below (with backprop=True)
+    def backward(self, output_gradient, y=None):
+        # forward is run inside the sequential model class below (with backprop=True) y only used for differentiating soft max
+        print(self.linear_transrom.shape)
 
-        # d/dx activation function w.r.t. linear transformation Wx + b
-        activation_gradient = self.activation_fn_class.derivative(self.linear_transrom) # note activation function should be a class that has a function derivative
-        layer_output_gradient = output_gradient * activation_gradient
+        if isinstance(self.activation_fn_class(), Softmax):
+            # gradient for softmax + cross-ent combined
+            layer_output_gradient = output_gradient - y
+        else:
+
+
+            # d/dx activation function w.r.t. linear transformation Wx + b
+            activation_gradient = self.activation_fn_class().derivative(self.linear_transrom) # dL/d activation
+            layer_output_gradient = output_gradient * activation_gradient # dL/dz = dL/da * da/dz
 
         # weights and bias
-        weights_gradient = np.dot(self.input.T, layer_output_gradient)
-        bias_gradient = np.sum(layer_output_gradient, axis=0) 
+        print(self.input.shape)
+        print(layer_output_gradient.shape)
+        weights_gradient = np.dot(self.input.T, layer_output_gradient) # dL/dW = X^T * dL/dz
+        bias_gradient = np.sum(layer_output_gradient, axis=0)  # dL/db = sum(dL/z)
 
         # make update to weights and biases
         learning_rate = 0.01
-        self.weights -= learning_rate * weights_gradient
-        self.bias -= learning_rate * bias_gradient
-
+        self.weights -= learning_rate * weights_gradient / self.input.shape[0] # devide by batch size to get average for batch size
+        self.bias -= learning_rate * bias_gradient / self.input.shape[0] 
+        print(np.dot(layer_output_gradient, self.weights.T).shape)
         return np.dot(layer_output_gradient, self.weights.T) # return the gradient (to be passed to previous layer)
 
 
@@ -101,14 +108,17 @@ class SequentialModel(object):
         # performs a backward pass through the model
         y_hat = self.forward(x, backprop=True) # backprop true to save self.linear_transform and self.activation in each layer
 
-        loss = self.loss_fn_class.forward(y=y, y_hat=y_hat)
-        loss_gradient = self.loss_fn_class.derivative(x) # not sure how to calculate this yet
+        loss = self.loss_fn_class().forward(y=y, y_hat=y_hat)
+        loss_gradient = self.loss_fn_class().derivative(y=y, y_hat=y_hat) # not sure how to calculate this yet
         
 
         # start from the last layer of the model
         for layer in reversed(self.model):
             print(layer)
-            loss_gradient = layer.backward(loss_gradient) # relys on the layer backward function
+            if isinstance(layer.activation_fn_class(), Softmax):
+                loss_gradient = layer.backward(loss_gradient, y=y) # have to pass y for derivative of softmax
+            else:
+                loss_gradient = layer.backward(loss_gradient) # relys on the layer backward function
 
         return loss
 
