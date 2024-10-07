@@ -30,9 +30,11 @@ class ReLU(ActivationFunction):
 class SELU(ActivationFunction):
     # scaled exponential linear unit
     def forward(self, x):
+        x = np.clip(x, -500, 500)  # to prevent overflow in exp(x)
         return np.where(x <= 0, 1.75809 * (np.exp(x)-1), 1.0507 * x)
     
     def derivative(self, x):
+        x = np.clip(x, -500, 500)  # to prevent overflow in exp(x)
         return np.where(x <= 0, 1.0507, 1.0507 * np.exp(x))
     
 

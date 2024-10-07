@@ -1,2 +1,2 @@
 # numpy_neural_network
-Neural network implemented in numpy
+Neural network implemented completely in numpy. Trained on MNIST dataset
