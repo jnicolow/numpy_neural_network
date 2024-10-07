@@ -8,6 +8,16 @@ class ActivationFunction:
         raise NotImplementedError('derivative not implemented for activation function')
     
 
+class DummyActivation(ActivationFunction):
+    def forward(self, x):
+        # simply return the input without any transformation
+        return x
+    
+    def derivative(self, x):
+        # the derivative of a linear function (i.e., f(x) = x) is just 1
+        return np.ones_like(x)
+
+
 class ReLU(ActivationFunction):
     # rectified linear unit
     def forward(self, x):

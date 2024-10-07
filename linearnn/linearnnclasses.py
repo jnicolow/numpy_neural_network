@@ -1,5 +1,5 @@
 import numpy as np
-from linearnn.activationfunctions import Softmax # check if it is softmax because we dont differentiate this activation
+from linearnn.activationfunctions import Softmax, DummyActivation # check if it is softmax because we dont differentiate this activation
 # from linearnn.optim import AdamOptimizer # import optimizer incase one isnt provided
 
 
@@ -15,7 +15,7 @@ def batch_norm(activations, epsilon=1e-5):
 
 
 class LinearLayer(object):
-    def __init__(self, input_size, output_size, activation_fn_class, weight_init=None, optimizer=None):
+    def __init__(self, input_size, output_size, activation_fn_class, weight_init=None, learning_rate=0.001, optimizer=None):
         if not weight_init is None:
             self.weights = weight_init((input_size, output_size))
         else:
@@ -25,6 +25,7 @@ class LinearLayer(object):
         self.activation_fn_class = activation_fn_class
 
         self.bias = np.zeros(output_size) # initialized to zero (changed during training)
+        self.learning_rate = learning_rate
         if optimizer is None: self.optimizer_weights = None # used in back prop
         else:
             self.optimizer_weights = optimizer() # this is initializing a new optimizer (one specifically for this layer)
@@ -53,15 +54,14 @@ class LinearLayer(object):
         return(activation)
     
 
-    def backward(self, output_gradient, y=None):
+    def backward(self, output_gradient, y=None, y_hat=None):
         # forward is run inside the sequential model class below (with backprop=True) y only used for differentiating soft max
         # print(self.linear_transrom.shape)
 
-        if isinstance(self.activation_fn_class(), Softmax):
+        if isinstance(self.activation_fn_class(), Softmax) or isinstance(self.activation_fn_class(), DummyActivation):
             # gradient for softmax + cross-ent combined
-            layer_output_gradient = output_gradient - y
+            layer_output_gradient = y_hat - y
         else:
-
 
             # d/dx activation function w.r.t. linear transformation Wx + b
             activation_gradient = self.activation_fn_class().derivative(self.linear_transrom) # dL/d activation
@@ -84,11 +84,10 @@ class LinearLayer(object):
         # print("Max gradient:", np.max(weights_gradient))
         # print("Min gradient:", np.min(weights_gradient))
         # make update to weights and biases
-        learning_rate = 0.001
         if self.optimizer_weights is None:
             # just do vanila GD update
-            self.weights -= learning_rate * weights_gradient / self.input.shape[0] # devide by batch size to get average for batch size
-            self.bias -= learning_rate * bias_gradient / self.input.shape[0] 
+            self.weights -= self.learning_rate * weights_gradient / self.input.shape[0] # devide by batch size to get average for batch size
+            self.bias -= self.learning_rate * bias_gradient / self.input.shape[0] 
         else:
             self.weights = self.optimizer_weights.update(self.weights, weights_gradient)
             self.bias = self.optimizer_bias.update(self.bias, bias_gradient)
