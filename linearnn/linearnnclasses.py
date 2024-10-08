@@ -4,14 +4,6 @@ from linearnn.activationfunctions import Softmax, DummyActivation # check if it 
 
 
 
-def batch_norm(activations, epsilon=1e-5):
-    # calculate mean of batch
-    mean = np.mean(activations)
-    variance = np.mean((activations - mean) ** 2)
-
-    activations = ((activations - mean)**2) / np.sqrt(variance + epsilon)
-    return activations
-
 
 
 class LinearLayer(object):
@@ -46,26 +38,19 @@ class LinearLayer(object):
 
         # activation
         activation = self.activation_fn_class().forward(linear_transformation_output) # activation function
-        # batch norm of activation
-        # activation = batch_norm(activations=activation)
 
-        if backprop:self.activation = activation
+        if backprop: self.activation = activation
 
         return(activation)
     
 
-    def backward(self, output_gradient, y=None, y_hat=None):
+    def backward(self, output_gradient):
         # forward is run inside the sequential model class below (with backprop=True) y only used for differentiating soft max
         # print(self.linear_transrom.shape)
 
-        if isinstance(self.activation_fn_class(), Softmax) or isinstance(self.activation_fn_class(), DummyActivation):
-            # gradient for softmax + cross-ent combined
-            layer_output_gradient = y_hat - y
-        else:
-
-            # d/dx activation function w.r.t. linear transformation Wx + b
-            activation_gradient = self.activation_fn_class().derivative(self.linear_transrom) # dL/d activation
-            layer_output_gradient = output_gradient * activation_gradient # dL/dz = dL/da * da/dz
+        # d/dx activation function w.r.t. linear transformation Wx + b
+        activation_gradient = self.activation_fn_class().derivative(self.linear_transrom) # dL/d activation
+        layer_output_gradient = output_gradient * activation_gradient # dL/dz = dL/da * da/dz
 
         # weights and bias
         # print(self.input.shape)
@@ -96,9 +81,25 @@ class LinearLayer(object):
         return np.dot(layer_output_gradient, self.weights.T) # return the gradient (to be passed to previous layer) (batch size by # nodes in layer)
 
 
+class DropoutLayer:
+    def __init__(self, dropout_rate=0.5):
+        self.dropout_rate = dropout_rate
+        self.mask=None
+
+    def forward(self, x, training=True):
+        if training:
+            self.mask = np.random.binomial(1, 1 - self.dropout_rate, size=x.shape) # create mask that drops out certain amount of neurons
+            return x * self.mask / (1 - self.dropout_rate) # scale activation 
+        else: return x # no drop out during inference
+
+    def backward(self, output_gradient):
+        # gradient only goes through non "droped out" nodes
+        return output_gradient * self.mask / (1 - self.dropout_rate)
+
+
 
 class SequentialModel(object):
-    def __init__(self, input_size:int, output_size:int, hidden_layers:tuple, activation_fn_classes:tuple, weight_init:tuple=None, loss_fn_class=None, optimizer=None):
+    def __init__(self, input_size:int, output_size:int, hidden_layers:tuple, activation_fn_classes:tuple, weight_init:tuple=None, loss_fn_class=None, learning_rate=0.01, optimizer=None):
         self.input_size = input_size
         # self.output_size = output_size
         self.layers = (input_size, *hidden_layers, output_size) # all the layers but the iput layer
@@ -106,6 +107,7 @@ class SequentialModel(object):
         if weight_init is None: self.weight_init = (None,) * len(activation_fn_classes)  # create tuple of None to just use random
         else: self.weight_init = weight_init  # use the provided weight_init if it exists
         self.loss_fn_class = loss_fn_class
+        self.learning_rate = learning_rate
         self.optimizer = optimizer
 
         self.model = self.build_model() # build the model
@@ -121,6 +123,7 @@ class SequentialModel(object):
                 self.layers[i], 
                 activation_fn_class=self.activation_fn_classes[i], 
                 weight_init=self.weight_init[i],
+                learning_rate=self.learning_rate,
                 optimizer = self.optimizer
             )
             
@@ -142,17 +145,19 @@ class SequentialModel(object):
     
 
     def backward(self, x, y):
+        training_loss_class = self.loss_fn_class(l2_lambda=0.0) # turn l2 regularization off
         # performs a backward pass through the model
         y_hat = self.forward(x, backprop=True) # backprop true to save self.linear_transform and self.activation in each layer
 
-        loss = self.loss_fn_class().forward(y=y, y_hat=y_hat)
-        loss_gradient = self.loss_fn_class().derivative(y=y, y_hat=y_hat) # not sure how to calculate this yet
+        loss = training_loss_class.forward(y=y, y_hat=y_hat, weights=self.model[-1].weights) # pass the weights for the last layer
+        loss_gradient = training_loss_class.derivative(y=y, y_hat=y_hat) # needs to be combined with softmax
         
 
         # start from the last layer of the model
         for layer in reversed(self.model):
             # print(layer)
-            if isinstance(layer.activation_fn_class(), Softmax):
+            if isinstance(layer.activation_fn_class(), DummyActivation):
+                # this is the putputlayer DummyActivation does no transformations
                 loss_gradient = layer.backward(loss_gradient, y=y) # have to pass y for derivative of softmax
             else:
                 loss_gradient = layer.backward(loss_gradient) # relys on the layer backward function
