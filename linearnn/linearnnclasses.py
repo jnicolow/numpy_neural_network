@@ -116,13 +116,15 @@ class SequentialModel(object):
     def build_model(self):
         print('building model...')
         model_layers = []
+        print(len(self.layers))
+     
         for i in range(1, len(self.layers)):
-
+            print(i)
             layer = LinearLayer(
                 self.layers[i-1], 
                 self.layers[i], 
-                activation_fn_class=self.activation_fn_classes[i], 
-                weight_init=self.weight_init[i],
+                activation_fn_class=self.activation_fn_classes[i-1], 
+                weight_init=self.weight_init[i-1],
                 learning_rate=self.learning_rate,
                 optimizer = self.optimizer
             )
@@ -152,15 +154,12 @@ class SequentialModel(object):
         loss = training_loss_class.forward(y=y, y_hat=y_hat, weights=self.model[-1].weights) # pass the weights for the last layer
         loss_gradient = training_loss_class.derivative(y=y, y_hat=y_hat) # needs to be combined with softmax
         
-
+        gradient = loss_gradient
         # start from the last layer of the model
         for layer in reversed(self.model):
             # print(layer)
-            if isinstance(layer.activation_fn_class(), DummyActivation):
-                # this is the putputlayer DummyActivation does no transformations
-                loss_gradient = layer.backward(loss_gradient, y=y) # have to pass y for derivative of softmax
-            else:
-                loss_gradient = layer.backward(loss_gradient) # relys on the layer backward function
+            
+            gradient = layer.backward(gradient) # relys on the layer backward function
 
         return loss
 
