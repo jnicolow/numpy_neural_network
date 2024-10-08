@@ -147,7 +147,7 @@ class SequentialModel(object):
     
 
     def backward(self, x, y):
-        training_loss_class = self.loss_fn_class(l2_lambda=0.0) # turn l2 regularization off
+        training_loss_class = self.loss_fn_class(l2_lambda=1e-4) # turn l2 regularization off
         # performs a backward pass through the model
         y_hat = self.forward(x, backprop=True) # backprop true to save self.linear_transform and self.activation in each layer
 
